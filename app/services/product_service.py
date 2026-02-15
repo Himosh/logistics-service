@@ -26,3 +26,22 @@ def list_products(db: Session, limit: int, offset: int) -> tuple[int, list[Produ
         .offset(offset)
     ).scalars().all()
     return total, items
+
+def search_products(db: Session, name_contains: str, limit: int, offset: int) -> tuple[int, list[Product]]:
+    pattern = f"%{name_contains}%"
+
+    base_where = Product.name.ilike(pattern)
+
+    total = db.execute(
+        select(func.count(Product.id)).where(base_where)
+    ).scalar_one()
+
+    items = db.execute(
+        select(Product)
+        .where(base_where)
+        .order_by(Product.id.desc())
+        .limit(limit)
+        .offset(offset)
+    ).scalars().all()
+
+    return total, items

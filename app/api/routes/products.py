@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_db
 from app.schemas.product import ProductCreate, ProductOut, ProductListResponse
-from app.services.product_service import create_product as create_product_svc, list_products as list_products_svc
+from app.services.product_service import create_product as create_product_svc, list_products as list_products_svc, search_products as search_products_svc
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -18,4 +18,14 @@ def list_products(
     offset: int = Query(0, ge=0),
 ):
     total, items = list_products_svc(db, limit, offset)
+    return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+@router.get("/search", response_model=ProductListResponse)
+def search_products(
+    q: str = Query(..., min_length=1, description="Name contains (case-insensitive)"),
+    db: Session = Depends(get_db),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    total, items = search_products_svc(db, q, limit, offset)
     return {"total": total, "limit": limit, "offset": offset, "items": items}
