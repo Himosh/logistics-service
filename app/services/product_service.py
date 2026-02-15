@@ -45,3 +45,11 @@ def search_products(db: Session, name_contains: str, limit: int, offset: int) ->
     ).scalars().all()
 
     return total, items
+
+def search_all_products(db: Session, name_contains: str) -> list[Product]:
+    pattern = f"%{name_contains}%"
+    return db.execute(
+        select(Product)
+        .where(Product.name.ilike(pattern))   # case-insensitive (Postgres)
+        .order_by(Product.id.desc())
+    ).scalars().all()

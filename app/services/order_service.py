@@ -126,35 +126,39 @@ def filter_orders(
         conditions.append(Order.created_at >= dt_from)
 
     if date_to:
-        # inclusive end-date -> use next day start as exclusive upper bound
         dt_to_excl = datetime.combine(date_to + timedelta(days=1), time.min)
         conditions.append(Order.created_at < dt_to_excl)
 
-    # ----- If filtering by product name, do a join and paginate by distinct order IDs -----
+    # If filtering by product name, join and paginate by distinct Order IDs
     if product_name_contains:
         pattern = f"%{product_name_contains}%"
         conditions.append(Product.name.ilike(pattern))
 
-        total = db.execute(
+        total_stmt = (
             select(func.count(func.distinct(Order.id)))
             .select_from(Order)
             .join(Order.items)
             .join(OrderItem.product)
-            .where(*conditions)
-        ).scalar_one()
+        )
+        if conditions:
+            total_stmt = total_stmt.where(*conditions)
 
-        id_rows = db.execute(
+        total = db.execute(total_stmt).scalar_one()
+
+        id_stmt = (
             select(Order.id, Order.created_at)
             .select_from(Order)
             .join(Order.items)
             .join(OrderItem.product)
-            .where(*conditions)
             .group_by(Order.id, Order.created_at)
             .order_by(Order.created_at.desc(), Order.id.desc())
             .limit(limit)
             .offset(offset)
-        ).all()
+        )
+        if conditions:
+            id_stmt = id_stmt.where(*conditions)
 
+        id_rows = db.execute(id_stmt).all()
         order_ids = [r[0] for r in id_rows]
         if not order_ids:
             return total, []
@@ -165,23 +169,25 @@ def filter_orders(
             .options(selectinload(Order.items).selectinload(OrderItem.product))
         ).scalars().all()
 
-        # keep the same order as order_ids
         order_map = {o.id: o for o in orders}
         ordered = [order_map[oid] for oid in order_ids if oid in order_map]
         return total, ordered
 
-    # ----- Otherwise: no join needed -----
-    total = db.execute(
-        select(func.count(Order.id)).where(*conditions)
-    ).scalar_one()
+    # Otherwise no join needed
+    total_stmt = select(func.count(Order.id))
+    if conditions:
+        total_stmt = total_stmt.where(*conditions)
+    total = db.execute(total_stmt).scalar_one()
 
-    items = db.execute(
+    items_stmt = (
         select(Order)
-        .where(*conditions)
         .options(selectinload(Order.items).selectinload(OrderItem.product))
         .order_by(Order.created_at.desc(), Order.id.desc())
         .limit(limit)
         .offset(offset)
-    ).scalars().all()
+    )
+    if conditions:
+        items_stmt = items_stmt.where(*conditions)
 
+    items = db.execute(items_stmt).scalars().all()
     return total, items
